@@ -1,52 +1,79 @@
 import React, { useState, useEffect } from 'react';
 import { ToDoList } from './components/ToDoList';
 import { database } from './firebase';
-import { ref, onValue, set } from 'firebase/database';
-import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core';
+import { ref, onValue, set, remove } from 'firebase/database';
+import { DndContext, closestCenter, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 
 export interface ToDo {
   id: string;
   text: string;
+  completed: boolean;
 }
 
 const App: React.FC = () => {
   const [todos, setTodos] = useState<ToDo[]>([]);
   const [newTodo, setNewTodo] = useState('');
   const [isSyncing, setIsSyncing] = useState(true);
+  const [currentlyDraggingId, setCurrentlyDraggingId] = useState<string | null>(null);
+
+  const todosRef = ref(database, 'todos');
+  const draggingRef = ref(database, 'dragging');
 
   useEffect(() => {
-    const todosRef = ref(database, 'todos');
     onValue(todosRef, (snapshot) => {
       const data = snapshot.val();
-      if (data) {
-        setTodos(data);
-      }
+      setTodos(data ? data : []);
       setIsSyncing(false);
     });
-  }, []);
+
+    onValue(draggingRef, (snapshot) => {
+      setCurrentlyDraggingId(snapshot.val()?.itemId || null);
+    });
+
+    return () => {
+      remove(draggingRef);
+    };
+  }, [draggingRef, todosRef]);
 
   const updateTodosInFirebase = (newTodos: ToDo[]) => {
-    set(ref(database, 'todos'), newTodos);
+    set(todosRef, newTodos);
   };
 
   const handleAddTodo = () => {
     if (newTodo.trim() === '') return;
-    const newTodos = [...todos, { id: `todo-${Date.now()}`, text: newTodo }];
+    const newTodoItem: ToDo = { id: `todo-${Date.now()}`, text: newTodo, completed: false };
+    const newTodos = todos ? [...todos, newTodoItem] : [newTodoItem];
     updateTodosInFirebase(newTodos);
     setNewTodo('');
   };
 
+  const handleToggleComplete = (todoId: string) => {
+    const newTodos = todos.map(todo =>
+      todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
+    );
+    updateTodosInFirebase(newTodos);
+  };
+
+  const handleDeleteTodo = (todoId: string) => {
+    const newTodos = todos.filter(todo => todo.id !== todoId);
+    updateTodosInFirebase(newTodos);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    set(draggingRef, { itemId: event.active.id });
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    remove(draggingRef);
+
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      setTodos((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-        const reorderedItems = arrayMove(items, oldIndex, newIndex);
-        updateTodosInFirebase(reorderedItems);
-        return reorderedItems;
-      });
+      const oldIndex = todos.findIndex((item) => item.id === active.id);
+      const newIndex = todos.findIndex((item) => item.id === over.id);
+      const reorderedItems = arrayMove(todos, oldIndex, newIndex);
+      setTodos(reorderedItems);
+      updateTodosInFirebase(reorderedItems);
     }
   };
 
@@ -56,7 +83,7 @@ const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      <h1>Real-Time To-Do List</h1>
+      <h1>To-Do List</h1>
       <div className="input-container">
         <input
           type="text"
@@ -67,8 +94,17 @@ const App: React.FC = () => {
         />
         <button onClick={handleAddTodo}>Add</button>
       </div>
-      <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <ToDoList todos={todos} />
+      <DndContext
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <ToDoList
+          todos={todos}
+          onToggleComplete={handleToggleComplete}
+          onDelete={handleDeleteTodo}
+          remoteDraggingId={currentlyDraggingId}
+        />
       </DndContext>
     </div>
   );
