@@ -1,16 +1,21 @@
-import React from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import type { ToDo } from '../App';
+import React from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import type { ToDo } from "../App";
 
 interface ToDoItemProps {
   todo: ToDo;
   onToggleComplete: (id: string) => void;
   onDelete: (id: string) => void;
-  isRemoteDragging: boolean;
+  isGhost: boolean;
 }
 
-export const ToDoItem: React.FC<ToDoItemProps> = ({ todo, onToggleComplete, onDelete, isRemoteDragging }) => {
+export const ToDoItem: React.FC<ToDoItemProps> = ({
+  todo,
+  onToggleComplete,
+  onDelete,
+  isGhost,
+}) => {
   const {
     attributes,
     listeners,
@@ -19,21 +24,27 @@ export const ToDoItem: React.FC<ToDoItemProps> = ({ todo, onToggleComplete, onDe
     transition,
     isDragging,
   } = useSortable({ id: todo.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const style = { transform: CSS.Transform.toString(transform), transition };
 
   const containerClasses = [
-    'todo-item-container',
-    isDragging ? 'dragging' : '',
-    isRemoteDragging ? 'remote-dragging' : '',
-    todo.completed ? 'completed' : ''
-  ].join(' ').trim();
+    "todo-item-container",
+    isDragging ? "dragging" : "",
+    todo.completed ? "completed" : "",
+  ]
+    .join(" ")
+    .trim();
+
+  if (isGhost) {
+    return <div className="drag-placeholder" />;
+  }
 
   return (
-    <div ref={setNodeRef} style={style} className={containerClasses}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={containerClasses}
+      data-rbd-draggable-id={todo.id}
+    >
       <div className="drag-handle" {...attributes} {...listeners}>
         ⠿
       </div>
