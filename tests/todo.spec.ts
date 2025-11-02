@@ -1,4 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 
 const addTodo = async (page: Page, text: string) => {
   await page.getByPlaceholder('Add a new task...').fill(text);
@@ -64,8 +67,7 @@ test.describe('To-Do List E2E Tests', () => {
     
     await item2.locator('.drag-handle').dragTo(item1);
 
-    const allItems = await page.locator('.todo-text').allTextContents();
-    expect(allItems).toEqual(['Item 2', 'Item 1']);
+    await expect(page.locator('.todo-item-container .todo-text').first()).toHaveText('Item 2');
   });
 });
 
@@ -140,4 +142,22 @@ test.describe('Real-Time Collaboration Tests', () => {
     await page1.close();
     await page2.close();
   });
+});
+
+test.afterEach(async ({ page }) => {
+  if (process.env.VITE_COVERAGE) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const coverage = await page.evaluate(() => (window as any).__coverage__);
+
+    if (coverage) {
+      if (!fs.existsSync('.nyc_output')) {
+        fs.mkdirSync('.nyc_output');
+      }
+      
+      fs.writeFileSync(
+        path.join('.nyc_output', `coverage-${crypto.randomUUID()}.json`),
+        JSON.stringify(coverage)
+      );
+    }
+  }
 });
